@@ -110,39 +110,168 @@ export function getVerifyChangeSkillTemplate(): SkillTemplate {
 
 8. **Generate Verification Report**
 
-   **Summary Scorecard**:
+   **Unified Verification Report**:
+
+   \`\`\`json
+   {
+     "verification_report": {
+       "spec_compliance": {
+         "completeness": "PASS|FAIL",
+         "correctness": "PASS|FAIL",
+         "coherence": "PASS|FAIL",
+         "issues": []
+       },
+       "dst_simulation": {
+         "scenarios_passed": 0,
+         "scenarios_failed": 0,
+         "critical_findings": [],
+         "skipped": false,
+         "skip_reason": null
+       },
+       "e2e": {
+         "figma_compliance": { "passed": 0, "failed": 0 },
+         "business_workflows": { "passed": 0, "failed": 0 },
+         "smoke": { "passed": 0, "failed": 0 },
+         "skipped": false,
+         "skip_reason": null
+       },
+       "gate": {
+         "lint": "PASS|FAIL|SKIP",
+         "typecheck": "PASS|FAIL|SKIP",
+         "tests": "PASS|FAIL|SKIP",
+         "exit_codes": {}
+       },
+       "code_review": {
+         "critical": 0,
+         "important": 0,
+         "minor": 0,
+         "assessment": "ready|fix_issues|escalate",
+         "findings": []
+       },
+       "overall": "PASS|FAIL"
+     }
+   }
+   \`\`\`
+
+   Also display a human-readable summary:
+
    \`\`\`
    ## Verification Report: <change-name>
 
    ### Summary
-   | Dimension    | Status           |
-   |--------------|------------------|
-   | Completeness | X/Y tasks, N reqs|
-   | Correctness  | M/N reqs covered |
-   | Coherence    | Followed/Issues  |
+   | Phase | Status |
+   |---|---|
+   | Spec Compliance | PASS/FAIL (X/Y tasks, N/M reqs) |
+   | DST Simulation | PASS/FAIL/SKIP (N scenarios) |
+   | E2E Tests | PASS/FAIL/SKIP (N tests) |
+   | Pre-complete Gate | PASS/FAIL (lint, typecheck, tests) |
+   | Code Review | Ready/Fix Issues/Escalate (N findings) |
+   | **Overall** | **PASS/FAIL** |
    \`\`\`
 
-   **Issues by Priority**:
+9. **DST Simulation (Fault Injection)**
 
-   1. **CRITICAL** (Must fix before archive):
-      - Incomplete tasks
-      - Missing requirement implementations
-      - Each with specific, actionable recommendation
+   If Docker containers are running, run fault injection to find resilience gaps. Use Toxiproxy as a sidecar proxy.
 
-   2. **WARNING** (Should fix):
-      - Spec/design divergences
-      - Missing scenario coverage
-      - Each with specific recommendation
+   **Setup** (if not already configured):
+   - Generate a DST overlay \`docker-compose.dst.yml\` with Toxiproxy sidecar (ports 8474, 8001, 5433, 8002) and WireMock (port 8080)
+   - Rewire service URLs through Toxiproxy proxies
+   - Run: \`docker compose -f docker-compose.yml -f docker-compose.dst.yml up -d\`
 
-   3. **SUGGESTION** (Nice to fix):
-      - Pattern inconsistencies
-      - Minor improvements
-      - Each with specific recommendation
+   **Run 6 fault scenarios** (for each: inject fault → test → capture → remove fault → verify recovery):
 
-   **Final Assessment**:
-   - If CRITICAL issues: "X critical issue(s) found. Fix before archiving."
-   - If only warnings: "No critical issues. Y warning(s) to consider. Ready for archive (with noted improvements)."
-   - If all clear: "All checks passed. Ready for archive."
+   | Scenario | Fault | What it tests |
+   |---|---|---|
+   | Network latency (FE ↔ BE) | 2000ms latency via Toxiproxy | Timeout handling, loading states |
+   | Connection reset (FE ↔ BE) | Reset peer via Toxiproxy | Retry logic, error messages |
+   | Database timeout (BE ↔ DB) | 5000ms timeout via Toxiproxy | Query timeout handling, connection pool |
+   | External API failure (BE ↔ 3rd party) | Connection reset via WireMock | Fallback behavior, circuit breakers |
+   | Service crash & recovery | \`docker compose stop/start backend\` | Reconnection, state recovery |
+   | Bandwidth restriction | 10 rate limit via Toxiproxy | Graceful degradation |
+
+   **Categorize findings:**
+   - \`startup_error\` — Boot failure
+   - \`integration_error\` — Service communication failure
+   - \`resilience\` — Recovery failure after fault removal
+   - \`timeout_handling\` — Missing or inadequate timeout handling
+   - \`error_handling\` — Unhandled exceptions under fault
+   - \`state_management\` — Corrupted state after fault
+   - \`recovery\` — Failed to recover after fault removed
+
+   Skip this step if Docker is not set up. Note "DST skipped: no Docker environment" in the report.
+
+10. **E2E Verification (Playwright)**
+
+    Run the full Playwright e2e suite. If Playwright is not set up, set it up first:
+    - Install: \`npm init playwright@latest\`
+    - Create \`playwright.config.ts\` with three projects:
+
+    **Project 1: Figma-Compliance** (if Figma designs exist)
+    - Design token assertions: compare computed CSS against design tokens
+    - Visual regression: screenshot comparison with \`maxDiffPixelRatio: 0.01\`
+    - Structural matching: verify DOM structure matches component hierarchy
+
+    **Project 2: Business-Workflows**
+    - User journey tests based on the spec's scenarios
+    - Each \`#### Scenario:\` from the delta specs becomes an e2e test
+    - Test primary flows: browsing, forms, data persistence, error states
+
+    **Project 3: Smoke** (always runs)
+    - App loads successfully
+    - API health endpoint responds
+    - Primary content renders
+
+    Run: \`npx playwright test\`
+
+    Skip this step if the project has no frontend. Note "E2E skipped: no frontend detected" in the report.
+
+11. **Pre-complete Gate**
+
+    **Iron law: NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE**
+
+    Before generating the final report:
+    1. **Identify** what commands prove the implementation is correct (lint, typecheck, test suite)
+    2. **Run** each command fresh — no cached results, no previous runs
+    3. **Read** full output — check exit code, count failures, read error messages
+    4. **Verify** the output confirms the claim
+    5. **Only then** make completion claims in the report
+
+    **Red flags — STOP if you catch yourself:**
+    - Using "should", "probably", "seems to" instead of concrete evidence
+    - Expressing satisfaction ("Great!", "Perfect!", "Done!") before running verification
+    - About to generate the report without running commands first
+    - Trusting cached or previous test results instead of running fresh
+
+    | Claim | Requires | NOT Sufficient |
+    |---|---|---|
+    | Tests pass | Test command output: 0 failures, exit code 0 | Previous run, "should pass" |
+    | Linter clean | Linter output: 0 errors, 0 warnings | Partial check, typecheck only |
+    | Build succeeds | Build command: exit code 0 | Linter passing |
+    | Bug fixed | Reproduce original symptom: now passes | "Code changed, assumed fixed" |
+
+12. **Code Review**
+
+    Review all code changes in the change:
+
+    1. **Gather the diff**: All commits since the change began
+       \`\`\`bash
+       git diff <base-commit>..HEAD
+       \`\`\`
+    2. **Review against the spec**: Check each requirement, scenario, and design decision against the implementation
+    3. **Check for common issues:**
+       - Missed requirements from the spec
+       - Security vulnerabilities (OWASP top 10: injection, XSS, auth bypass, etc.)
+       - Test gaps — untested edge cases, missing error path tests
+       - Code quality — duplication, unclear naming, overly complex logic
+       - API contract mismatches between frontend and backend
+    4. **Categorize findings:**
+       - **CRITICAL**: Must fix before archiving (security issues, missed requirements, broken functionality)
+       - **IMPORTANT**: Should fix (test gaps, significant code quality issues)
+       - **MINOR**: Nice to fix (style, naming, minor improvements)
+    5. **Assessment:**
+       - "Ready to archive" — no critical issues
+       - "Fix issues then archive" — critical issues found with specific recommendations
+       - "Escalate to human" — architectural concerns or ambiguous requirements needing human judgment
 
 **Verification Heuristics**
 
@@ -279,39 +408,168 @@ export function getOpsxVerifyCommandTemplate(): CommandTemplate {
 
 8. **Generate Verification Report**
 
-   **Summary Scorecard**:
+   **Unified Verification Report**:
+
+   \`\`\`json
+   {
+     "verification_report": {
+       "spec_compliance": {
+         "completeness": "PASS|FAIL",
+         "correctness": "PASS|FAIL",
+         "coherence": "PASS|FAIL",
+         "issues": []
+       },
+       "dst_simulation": {
+         "scenarios_passed": 0,
+         "scenarios_failed": 0,
+         "critical_findings": [],
+         "skipped": false,
+         "skip_reason": null
+       },
+       "e2e": {
+         "figma_compliance": { "passed": 0, "failed": 0 },
+         "business_workflows": { "passed": 0, "failed": 0 },
+         "smoke": { "passed": 0, "failed": 0 },
+         "skipped": false,
+         "skip_reason": null
+       },
+       "gate": {
+         "lint": "PASS|FAIL|SKIP",
+         "typecheck": "PASS|FAIL|SKIP",
+         "tests": "PASS|FAIL|SKIP",
+         "exit_codes": {}
+       },
+       "code_review": {
+         "critical": 0,
+         "important": 0,
+         "minor": 0,
+         "assessment": "ready|fix_issues|escalate",
+         "findings": []
+       },
+       "overall": "PASS|FAIL"
+     }
+   }
+   \`\`\`
+
+   Also display a human-readable summary:
+
    \`\`\`
    ## Verification Report: <change-name>
 
    ### Summary
-   | Dimension    | Status           |
-   |--------------|------------------|
-   | Completeness | X/Y tasks, N reqs|
-   | Correctness  | M/N reqs covered |
-   | Coherence    | Followed/Issues  |
+   | Phase | Status |
+   |---|---|
+   | Spec Compliance | PASS/FAIL (X/Y tasks, N/M reqs) |
+   | DST Simulation | PASS/FAIL/SKIP (N scenarios) |
+   | E2E Tests | PASS/FAIL/SKIP (N tests) |
+   | Pre-complete Gate | PASS/FAIL (lint, typecheck, tests) |
+   | Code Review | Ready/Fix Issues/Escalate (N findings) |
+   | **Overall** | **PASS/FAIL** |
    \`\`\`
 
-   **Issues by Priority**:
+9. **DST Simulation (Fault Injection)**
 
-   1. **CRITICAL** (Must fix before archive):
-      - Incomplete tasks
-      - Missing requirement implementations
-      - Each with specific, actionable recommendation
+   If Docker containers are running, run fault injection to find resilience gaps. Use Toxiproxy as a sidecar proxy.
 
-   2. **WARNING** (Should fix):
-      - Spec/design divergences
-      - Missing scenario coverage
-      - Each with specific recommendation
+   **Setup** (if not already configured):
+   - Generate a DST overlay \`docker-compose.dst.yml\` with Toxiproxy sidecar (ports 8474, 8001, 5433, 8002) and WireMock (port 8080)
+   - Rewire service URLs through Toxiproxy proxies
+   - Run: \`docker compose -f docker-compose.yml -f docker-compose.dst.yml up -d\`
 
-   3. **SUGGESTION** (Nice to fix):
-      - Pattern inconsistencies
-      - Minor improvements
-      - Each with specific recommendation
+   **Run 6 fault scenarios** (for each: inject fault → test → capture → remove fault → verify recovery):
 
-   **Final Assessment**:
-   - If CRITICAL issues: "X critical issue(s) found. Fix before archiving."
-   - If only warnings: "No critical issues. Y warning(s) to consider. Ready for archive (with noted improvements)."
-   - If all clear: "All checks passed. Ready for archive."
+   | Scenario | Fault | What it tests |
+   |---|---|---|
+   | Network latency (FE ↔ BE) | 2000ms latency via Toxiproxy | Timeout handling, loading states |
+   | Connection reset (FE ↔ BE) | Reset peer via Toxiproxy | Retry logic, error messages |
+   | Database timeout (BE ↔ DB) | 5000ms timeout via Toxiproxy | Query timeout handling, connection pool |
+   | External API failure (BE ↔ 3rd party) | Connection reset via WireMock | Fallback behavior, circuit breakers |
+   | Service crash & recovery | \`docker compose stop/start backend\` | Reconnection, state recovery |
+   | Bandwidth restriction | 10 rate limit via Toxiproxy | Graceful degradation |
+
+   **Categorize findings:**
+   - \`startup_error\` — Boot failure
+   - \`integration_error\` — Service communication failure
+   - \`resilience\` — Recovery failure after fault removal
+   - \`timeout_handling\` — Missing or inadequate timeout handling
+   - \`error_handling\` — Unhandled exceptions under fault
+   - \`state_management\` — Corrupted state after fault
+   - \`recovery\` — Failed to recover after fault removed
+
+   Skip this step if Docker is not set up. Note "DST skipped: no Docker environment" in the report.
+
+10. **E2E Verification (Playwright)**
+
+    Run the full Playwright e2e suite. If Playwright is not set up, set it up first:
+    - Install: \`npm init playwright@latest\`
+    - Create \`playwright.config.ts\` with three projects:
+
+    **Project 1: Figma-Compliance** (if Figma designs exist)
+    - Design token assertions: compare computed CSS against design tokens
+    - Visual regression: screenshot comparison with \`maxDiffPixelRatio: 0.01\`
+    - Structural matching: verify DOM structure matches component hierarchy
+
+    **Project 2: Business-Workflows**
+    - User journey tests based on the spec's scenarios
+    - Each \`#### Scenario:\` from the delta specs becomes an e2e test
+    - Test primary flows: browsing, forms, data persistence, error states
+
+    **Project 3: Smoke** (always runs)
+    - App loads successfully
+    - API health endpoint responds
+    - Primary content renders
+
+    Run: \`npx playwright test\`
+
+    Skip this step if the project has no frontend. Note "E2E skipped: no frontend detected" in the report.
+
+11. **Pre-complete Gate**
+
+    **Iron law: NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE**
+
+    Before generating the final report:
+    1. **Identify** what commands prove the implementation is correct (lint, typecheck, test suite)
+    2. **Run** each command fresh — no cached results, no previous runs
+    3. **Read** full output — check exit code, count failures, read error messages
+    4. **Verify** the output confirms the claim
+    5. **Only then** make completion claims in the report
+
+    **Red flags — STOP if you catch yourself:**
+    - Using "should", "probably", "seems to" instead of concrete evidence
+    - Expressing satisfaction ("Great!", "Perfect!", "Done!") before running verification
+    - About to generate the report without running commands first
+    - Trusting cached or previous test results instead of running fresh
+
+    | Claim | Requires | NOT Sufficient |
+    |---|---|---|
+    | Tests pass | Test command output: 0 failures, exit code 0 | Previous run, "should pass" |
+    | Linter clean | Linter output: 0 errors, 0 warnings | Partial check, typecheck only |
+    | Build succeeds | Build command: exit code 0 | Linter passing |
+    | Bug fixed | Reproduce original symptom: now passes | "Code changed, assumed fixed" |
+
+12. **Code Review**
+
+    Review all code changes in the change:
+
+    1. **Gather the diff**: All commits since the change began
+       \`\`\`bash
+       git diff <base-commit>..HEAD
+       \`\`\`
+    2. **Review against the spec**: Check each requirement, scenario, and design decision against the implementation
+    3. **Check for common issues:**
+       - Missed requirements from the spec
+       - Security vulnerabilities (OWASP top 10: injection, XSS, auth bypass, etc.)
+       - Test gaps — untested edge cases, missing error path tests
+       - Code quality — duplication, unclear naming, overly complex logic
+       - API contract mismatches between frontend and backend
+    4. **Categorize findings:**
+       - **CRITICAL**: Must fix before archiving (security issues, missed requirements, broken functionality)
+       - **IMPORTANT**: Should fix (test gaps, significant code quality issues)
+       - **MINOR**: Nice to fix (style, naming, minor improvements)
+    5. **Assessment:**
+       - "Ready to archive" — no critical issues
+       - "Fix issues then archive" — critical issues found with specific recommendations
+       - "Escalate to human" — architectural concerns or ambiguous requirements needing human judgment
 
 **Verification Heuristics**
 

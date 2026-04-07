@@ -103,6 +103,38 @@ After completing all artifacts, summarize:
   - Do NOT copy \`<context>\`, \`<rules>\`, \`<project_context>\` blocks into the artifact
   - These guide what you write, but should never appear in the output
 
+**Verification Profile Assignment**
+
+When creating the tasks artifact, tag each task with a verification profile. This determines which verification signals run during \`/opsx:apply\`.
+
+**Profiles:**
+
+| Profile | When to Use | Signals |
+|---|---|---|
+| \`ui-component\` | CSS, layout, UI component changes | containers, lint, e2e (Figma-Compliance) |
+| \`api-endpoint\` | REST/GraphQL endpoint changes | containers, lint, property tests, contract validation |
+| \`integration\` | FE + BE changes together | containers, lint, e2e, contract validation |
+| \`database\` | Schema, query, migration changes | containers, lint, property tests, contract validation |
+| \`infrastructure\` | Docker, CI/CD, config changes | containers, lint |
+| \`refactoring\` | Restructuring without behavior change | containers, lint, property tests, e2e, contract validation |
+
+**How to assign:** Examine each task's description and affected file paths. Match against the profile table. If multiple profiles match, use the union of their signals. Default to \`integration\` if unclear.
+
+**Format each task in tasks.md like this:**
+
+\`\`\`markdown
+- [ ] Task description
+  **Verification:** profile-name (signal1 -> signal2 -> signal3)
+  **Files:** src/path/to/file.ts, test/path/to/test.ts
+\`\`\`
+
+Example:
+\`\`\`markdown
+- [ ] Add email validation to signup endpoint
+  **Verification:** api-endpoint (containers -> lint -> property tests -> contract validation)
+  **Files:** src/routes/auth.ts, test/routes/auth.test.ts
+\`\`\`
+
 **Guardrails**
 - Create ALL artifacts needed for implementation (as defined by schema's \`apply.requires\`)
 - Always read dependency artifacts before creating a new one
@@ -213,6 +245,38 @@ After completing all artifacts, summarize:
 - **IMPORTANT**: \`context\` and \`rules\` are constraints for YOU, not content for the file
   - Do NOT copy \`<context>\`, \`<rules>\`, \`<project_context>\` blocks into the artifact
   - These guide what you write, but should never appear in the output
+
+**Verification Profile Assignment**
+
+When creating the tasks artifact, tag each task with a verification profile. This determines which verification signals run during \`/opsx:apply\`.
+
+**Profiles:**
+
+| Profile | When to Use | Signals |
+|---|---|---|
+| \`ui-component\` | CSS, layout, UI component changes | containers, lint, e2e (Figma-Compliance) |
+| \`api-endpoint\` | REST/GraphQL endpoint changes | containers, lint, property tests, contract validation |
+| \`integration\` | FE + BE changes together | containers, lint, e2e, contract validation |
+| \`database\` | Schema, query, migration changes | containers, lint, property tests, contract validation |
+| \`infrastructure\` | Docker, CI/CD, config changes | containers, lint |
+| \`refactoring\` | Restructuring without behavior change | containers, lint, property tests, e2e, contract validation |
+
+**How to assign:** Examine each task's description and affected file paths. Match against the profile table. If multiple profiles match, use the union of their signals. Default to \`integration\` if unclear.
+
+**Format each task in tasks.md like this:**
+
+\`\`\`markdown
+- [ ] Task description
+  **Verification:** profile-name (signal1 -> signal2 -> signal3)
+  **Files:** src/path/to/file.ts, test/path/to/test.ts
+\`\`\`
+
+Example:
+\`\`\`markdown
+- [ ] Add email validation to signup endpoint
+  **Verification:** api-endpoint (containers -> lint -> property tests -> contract validation)
+  **Files:** src/routes/auth.ts, test/routes/auth.test.ts
+\`\`\`
 
 **Guardrails**
 - Create ALL artifacts needed for implementation (as defined by schema's \`apply.requires\`)

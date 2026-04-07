@@ -1,0 +1,29 @@
+# docker-compose.yml
+services:
+  test:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: pnpm test
+    environment:
+      - NODE_ENV=test
+      - VITEST_MAX_WORKERS=4
+
+  lint:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: sh -c "pnpm exec tsc --noEmit && pnpm lint"
+    environment:
+      - NODE_ENV=development
+
+  build:
+    build:
+      context: .
+      target: build
