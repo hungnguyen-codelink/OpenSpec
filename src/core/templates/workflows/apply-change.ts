@@ -65,22 +65,115 @@ export function getApplyChangeSkillTemplate(): SkillTemplate {
    - Remaining tasks overview
    - Dynamic instruction from CLI
 
-6. **Implement tasks (loop until done or blocked)**
+6. **Environment Setup (first task only)**
 
-   For each pending task:
-   - Show which task is being worked on
-   - Make the code changes required
-   - Keep changes minimal and focused
-   - Mark task complete in the tasks file: \`- [ ]\` → \`- [x]\`
+   Before implementing the first task, check if the project has Docker and structured logging set up. If not, set them up:
+
+   **Docker Setup** (if no \`Dockerfile\` or \`docker-compose.yml\` exists):
+   - Analyze the project structure to identify services, databases, and dependencies
+   - Generate a multi-stage \`Dockerfile\` with dev/build/production targets
+   - Generate \`docker-compose.yml\` with appropriate services, health checks, and volume mounts
+   - Run \`docker compose up -d --build --wait\` and verify all containers are healthy
+   - Run a smoke test: hit health endpoints, verify structured JSON logs are visible
+
+   **Structured Logging Setup** (if the codebase lacks JSON structured logging):
+   - Instrument the codebase with the appropriate logging library for the stack:
+     - **Node.js**: pino + AsyncLocalStorage for trace_id propagation
+     - **Python**: structlog + contextvars for trace_id propagation
+     - **Go**: zerolog + context.Context for trace_id propagation
+   - Every log line must include: \`timestamp\`, \`level\`, \`service\`, \`message\`, \`trace_id\`
+   - Error-level logs must also include: \`error_category\` (one of: timeout, connection, validation, logic, auth, rate_limit, unknown), \`error_detail\`, \`stack_trace\` (max 10 lines)
+   - Set Docker environment variables: \`LOG_FORMAT=json\`, \`LOG_LEVEL=info\`, \`SERVICE_NAME=<name>\`
+   - Never log: passwords, tokens, API keys, session IDs, full request/response bodies, SQL queries with parameters
+
+   **Exit criteria for setup:**
+   - All containers show "healthy" in \`docker compose ps\`
+   - Health endpoints respond with 200
+   - Structured JSON logs visible in \`docker compose logs\`
+
+   Skip this step if Docker and structured logging already exist.
+
+7. **Implement tasks with TDD and verification (loop until done or blocked)**
+
+   For each pending task, follow this loop:
+
+   **Step A: TDD Cycle (Red-Green-Refactor)**
+
+   1. Read the task and its verification profile (the \`**Verification:**\` line)
+   2. **RED**: Write a failing test that captures the expected behavior. One behavior per test. Clear name describing what it tests.
+   3. **Verify RED**: Run the test. It MUST fail. If it passes, the test is wrong — rewrite it. The failure reason should be "feature missing", not a typo or import error.
+   4. **GREEN**: Write the minimal code to make the test pass. Just enough — no extra features, no premature optimization.
+   5. **Verify GREEN**: Run the test. It MUST pass. All other tests must still pass too.
+   6. **REFACTOR**: Clean up and refactor while tests are green — remove duplication, improve names, extract helpers. Keep all tests passing.
+
+   Never skip the red step. A test written after implementation proves nothing — you never saw it catch the bug.
+
+   **Step B: Deploy to Docker**
+
+   Deploy changes to running containers:
+   - Preferred: \`docker compose watch\` (hot reload if supported)
+   - Fallback: \`docker compose up --build -d\`
+   - Wait for containers to be healthy before proceeding
+
+   **Step C: Verification Gate**
+
+   Run the signals specified by the task's verification profile, in cost order. Stop on critical failure — no point running expensive signals if cheap ones fail.
+
+   | Signal | Time | Blocking | What it checks |
+   |---|---|---|---|
+   | Static analysis (lint + typecheck) | ~5s | Yes | Code quality, type safety |
+   | Property-based tests | ~30s | Yes | Spec compliance |
+   | Mutation testing | ~2min | No (warning) | Test quality — are tests catching real bugs? |
+   | Contract validation | ~10s | Yes | FE/BE API shape agreement |
+   | DST simulation | ~3min | No (warning) | Resilience under fault injection |
+   | E2E tests | ~1-3min | Yes | Full user flow verification |
+
+   Not all signals apply to every task — only run the signals listed in the task's verification profile.
+
+   **Step D: Auto-Debug on Failure (using structured logs)**
+
+   If any blocking signal fails, do NOT retry blindly. Follow systematic debugging:
+
+   1. **Read structured logs** from Docker containers:
+      \`\`\`bash
+      docker compose logs --no-log-prefix --tail 100 <service> | jq -R 'fromjson? // empty | select(.level == "error")'
+      \`\`\`
+   2. **Categorize the error** by \`error_category\` field:
+      - \`timeout\` → Add timeout config, circuit breaker
+      - \`connection\` → Verify service networking, add retry logic
+      - \`validation\` → Fix input/output schema mismatch
+      - \`logic\` → Fix business rule implementation
+      - \`auth\` → Fix token handling, permissions
+      - \`rate_limit\` → Add backoff, queue, caching
+      - \`unknown\` → Investigate deeper, add proper error handling
+   3. **Trace the root cause**: Use \`trace_id\` to follow the request across services:
+      \`\`\`bash
+      docker compose logs --no-log-prefix | jq -R 'fromjson? // empty | select(.trace_id == "<id>")' | jq -s 'sort_by(.timestamp)'
+      \`\`\`
+   4. **Form a single hypothesis**: State clearly "I think X is the root cause because Y"
+   5. **Test minimal fix**: Make the smallest possible change, one variable at a time
+   6. **Re-run the gate**: Only the failing signals need to re-run
+
+   **Loop Guard — escalate instead of looping forever:**
+   - Same error 2 consecutive attempts → **STUCK** — report to user with full diagnosis
+   - 5 total attempts on same task → **EXHAUSTED** — report with complete attempt history
+   - Container won't start → **INFRASTRUCTURE** — escalate immediately
+   - Each fix reveals new problem elsewhere → Likely architectural issue — **STOP and discuss with user**
+
+   **Step E: Proceed**
+
+   When all gate signals pass:
+   - Mark task complete in tasks file: \`- [ ]\` → \`- [x]\`
+   - Commit the verified code
    - Continue to next task
 
    **Pause if:**
    - Task is unclear → ask for clarification
    - Implementation reveals a design issue → suggest updating artifacts
-   - Error or blocker encountered → report and wait for guidance
+   - Loop guard triggered (STUCK/EXHAUSTED/INFRASTRUCTURE) → report and wait
    - User interrupts
 
-7. **On completion or pause, show status**
+8. **On completion or pause, show status**
 
    Display:
    - Tasks completed this session
@@ -222,22 +315,115 @@ export function getOpsxApplyCommandTemplate(): CommandTemplate {
    - Remaining tasks overview
    - Dynamic instruction from CLI
 
-6. **Implement tasks (loop until done or blocked)**
+6. **Environment Setup (first task only)**
 
-   For each pending task:
-   - Show which task is being worked on
-   - Make the code changes required
-   - Keep changes minimal and focused
-   - Mark task complete in the tasks file: \`- [ ]\` → \`- [x]\`
+   Before implementing the first task, check if the project has Docker and structured logging set up. If not, set them up:
+
+   **Docker Setup** (if no \`Dockerfile\` or \`docker-compose.yml\` exists):
+   - Analyze the project structure to identify services, databases, and dependencies
+   - Generate a multi-stage \`Dockerfile\` with dev/build/production targets
+   - Generate \`docker-compose.yml\` with appropriate services, health checks, and volume mounts
+   - Run \`docker compose up -d --build --wait\` and verify all containers are healthy
+   - Run a smoke test: hit health endpoints, verify structured JSON logs are visible
+
+   **Structured Logging Setup** (if the codebase lacks JSON structured logging):
+   - Instrument the codebase with the appropriate logging library for the stack:
+     - **Node.js**: pino + AsyncLocalStorage for trace_id propagation
+     - **Python**: structlog + contextvars for trace_id propagation
+     - **Go**: zerolog + context.Context for trace_id propagation
+   - Every log line must include: \`timestamp\`, \`level\`, \`service\`, \`message\`, \`trace_id\`
+   - Error-level logs must also include: \`error_category\` (one of: timeout, connection, validation, logic, auth, rate_limit, unknown), \`error_detail\`, \`stack_trace\` (max 10 lines)
+   - Set Docker environment variables: \`LOG_FORMAT=json\`, \`LOG_LEVEL=info\`, \`SERVICE_NAME=<name>\`
+   - Never log: passwords, tokens, API keys, session IDs, full request/response bodies, SQL queries with parameters
+
+   **Exit criteria for setup:**
+   - All containers show "healthy" in \`docker compose ps\`
+   - Health endpoints respond with 200
+   - Structured JSON logs visible in \`docker compose logs\`
+
+   Skip this step if Docker and structured logging already exist.
+
+7. **Implement tasks with TDD and verification (loop until done or blocked)**
+
+   For each pending task, follow this loop:
+
+   **Step A: TDD Cycle (Red-Green-Refactor)**
+
+   1. Read the task and its verification profile (the \`**Verification:**\` line)
+   2. **RED**: Write a failing test that captures the expected behavior. One behavior per test. Clear name describing what it tests.
+   3. **Verify RED**: Run the test. It MUST fail. If it passes, the test is wrong — rewrite it. The failure reason should be "feature missing", not a typo or import error.
+   4. **GREEN**: Write the minimal code to make the test pass. Just enough — no extra features, no premature optimization.
+   5. **Verify GREEN**: Run the test. It MUST pass. All other tests must still pass too.
+   6. **REFACTOR**: Clean up and refactor while tests are green — remove duplication, improve names, extract helpers. Keep all tests passing.
+
+   Never skip the red step. A test written after implementation proves nothing — you never saw it catch the bug.
+
+   **Step B: Deploy to Docker**
+
+   Deploy changes to running containers:
+   - Preferred: \`docker compose watch\` (hot reload if supported)
+   - Fallback: \`docker compose up --build -d\`
+   - Wait for containers to be healthy before proceeding
+
+   **Step C: Verification Gate**
+
+   Run the signals specified by the task's verification profile, in cost order. Stop on critical failure — no point running expensive signals if cheap ones fail.
+
+   | Signal | Time | Blocking | What it checks |
+   |---|---|---|---|
+   | Static analysis (lint + typecheck) | ~5s | Yes | Code quality, type safety |
+   | Property-based tests | ~30s | Yes | Spec compliance |
+   | Mutation testing | ~2min | No (warning) | Test quality — are tests catching real bugs? |
+   | Contract validation | ~10s | Yes | FE/BE API shape agreement |
+   | DST simulation | ~3min | No (warning) | Resilience under fault injection |
+   | E2E tests | ~1-3min | Yes | Full user flow verification |
+
+   Not all signals apply to every task — only run the signals listed in the task's verification profile.
+
+   **Step D: Auto-Debug on Failure (using structured logs)**
+
+   If any blocking signal fails, do NOT retry blindly. Follow systematic debugging:
+
+   1. **Read structured logs** from Docker containers:
+      \`\`\`bash
+      docker compose logs --no-log-prefix --tail 100 <service> | jq -R 'fromjson? // empty | select(.level == "error")'
+      \`\`\`
+   2. **Categorize the error** by \`error_category\` field:
+      - \`timeout\` → Add timeout config, circuit breaker
+      - \`connection\` → Verify service networking, add retry logic
+      - \`validation\` → Fix input/output schema mismatch
+      - \`logic\` → Fix business rule implementation
+      - \`auth\` → Fix token handling, permissions
+      - \`rate_limit\` → Add backoff, queue, caching
+      - \`unknown\` → Investigate deeper, add proper error handling
+   3. **Trace the root cause**: Use \`trace_id\` to follow the request across services:
+      \`\`\`bash
+      docker compose logs --no-log-prefix | jq -R 'fromjson? // empty | select(.trace_id == "<id>")' | jq -s 'sort_by(.timestamp)'
+      \`\`\`
+   4. **Form a single hypothesis**: State clearly "I think X is the root cause because Y"
+   5. **Test minimal fix**: Make the smallest possible change, one variable at a time
+   6. **Re-run the gate**: Only the failing signals need to re-run
+
+   **Loop Guard — escalate instead of looping forever:**
+   - Same error 2 consecutive attempts → **STUCK** — report to user with full diagnosis
+   - 5 total attempts on same task → **EXHAUSTED** — report with complete attempt history
+   - Container won't start → **INFRASTRUCTURE** — escalate immediately
+   - Each fix reveals new problem elsewhere → Likely architectural issue — **STOP and discuss with user**
+
+   **Step E: Proceed**
+
+   When all gate signals pass:
+   - Mark task complete in tasks file: \`- [ ]\` → \`- [x]\`
+   - Commit the verified code
    - Continue to next task
 
    **Pause if:**
    - Task is unclear → ask for clarification
    - Implementation reveals a design issue → suggest updating artifacts
-   - Error or blocker encountered → report and wait for guidance
+   - Loop guard triggered (STUCK/EXHAUSTED/INFRASTRUCTURE) → report and wait
    - User interrupts
 
-7. **On completion or pause, show status**
+8. **On completion or pause, show status**
 
    Display:
    - Tasks completed this session

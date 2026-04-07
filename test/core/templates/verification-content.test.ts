@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   getOpsxProposeSkillTemplate,
   getOpsxProposeCommandTemplate,
+  getApplyChangeSkillTemplate,
+  getOpsxApplyCommandTemplate,
 } from '../../../src/core/templates/skill-templates.js';
 
 describe('verification content in propose template', () => {
@@ -35,5 +37,103 @@ describe('verification content in propose template', () => {
     expect(template.instructions).toContain('property tests');
     expect(template.instructions).toContain('contract validation');
     expect(template.instructions).toContain('e2e');
+  });
+});
+
+describe('verification content in apply template', () => {
+  describe('TDD integration', () => {
+    it('skill template includes TDD red-green-refactor cycle', () => {
+      const template = getApplyChangeSkillTemplate();
+      expect(template.instructions).toContain('TDD');
+      expect(template.instructions).toContain('failing test');
+      expect(template.instructions).toContain('red');
+      expect(template.instructions).toContain('green');
+      expect(template.instructions).toContain('refactor');
+    });
+
+    it('command template includes TDD red-green-refactor cycle', () => {
+      const template = getOpsxApplyCommandTemplate();
+      expect(template.content).toContain('TDD');
+      expect(template.content).toContain('failing test');
+      expect(template.content).toContain('red');
+      expect(template.content).toContain('green');
+      expect(template.content).toContain('refactor');
+    });
+  });
+
+  describe('Docker environment setup', () => {
+    it('skill template includes Docker setup instructions', () => {
+      const template = getApplyChangeSkillTemplate();
+      expect(template.instructions).toContain('Docker');
+      expect(template.instructions).toContain('docker compose');
+      expect(template.instructions).toContain('Dockerfile');
+      expect(template.instructions).toContain('health');
+    });
+
+    it('command template includes Docker setup instructions', () => {
+      const template = getOpsxApplyCommandTemplate();
+      expect(template.content).toContain('Docker');
+      expect(template.content).toContain('docker compose');
+      expect(template.content).toContain('Dockerfile');
+      expect(template.content).toContain('health');
+    });
+  });
+
+  describe('Verification gate', () => {
+    it('skill template includes verification gate signals', () => {
+      const template = getApplyChangeSkillTemplate();
+      expect(template.instructions).toContain('Verification Gate');
+      expect(template.instructions).toContain('Static analysis');
+      expect(template.instructions).toContain('Property');
+      expect(template.instructions).toContain('Mutation testing');
+      expect(template.instructions).toContain('Contract validation');
+      expect(template.instructions).toContain('E2E');
+    });
+
+    it('command template includes verification gate signals', () => {
+      const template = getOpsxApplyCommandTemplate();
+      expect(template.content).toContain('Verification Gate');
+      expect(template.content).toContain('Static analysis');
+      expect(template.content).toContain('Property');
+      expect(template.content).toContain('Mutation testing');
+      expect(template.content).toContain('Contract validation');
+      expect(template.content).toContain('E2E');
+    });
+  });
+
+  describe('Structured logging', () => {
+    it('skill template includes structured logging setup', () => {
+      const template = getApplyChangeSkillTemplate();
+      expect(template.instructions).toContain('structured log');
+      expect(template.instructions).toContain('trace_id');
+      expect(template.instructions).toContain('error_category');
+    });
+
+    it('command template includes structured logging setup', () => {
+      const template = getOpsxApplyCommandTemplate();
+      expect(template.content).toContain('structured log');
+      expect(template.content).toContain('trace_id');
+      expect(template.content).toContain('error_category');
+    });
+  });
+
+  describe('Auto-debug on failure', () => {
+    it('skill template includes systematic debugging with structured logs', () => {
+      const template = getApplyChangeSkillTemplate();
+      expect(template.instructions).toContain('root cause');
+      expect(template.instructions).toContain('hypothesis');
+      expect(template.instructions).toContain('escalate');
+      expect(template.instructions).toContain('STUCK');
+      expect(template.instructions).toContain('EXHAUSTED');
+    });
+
+    it('command template includes systematic debugging with structured logs', () => {
+      const template = getOpsxApplyCommandTemplate();
+      expect(template.content).toContain('root cause');
+      expect(template.content).toContain('hypothesis');
+      expect(template.content).toContain('escalate');
+      expect(template.content).toContain('STUCK');
+      expect(template.content).toContain('EXHAUSTED');
+    });
   });
 });
