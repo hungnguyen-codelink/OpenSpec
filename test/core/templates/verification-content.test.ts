@@ -5,6 +5,8 @@ import {
   getOpsxProposeCommandTemplate,
   getApplyChangeSkillTemplate,
   getOpsxApplyCommandTemplate,
+  getVerifyChangeSkillTemplate,
+  getOpsxVerifyCommandTemplate,
 } from '../../../src/core/templates/skill-templates.js';
 
 describe('verification content in propose template', () => {
@@ -134,6 +136,100 @@ describe('verification content in apply template', () => {
       expect(template.content).toContain('escalate');
       expect(template.content).toContain('STUCK');
       expect(template.content).toContain('EXHAUSTED');
+    });
+  });
+});
+
+describe('verification content in verify template', () => {
+  describe('DST simulation', () => {
+    it('skill template includes DST fault injection', () => {
+      const template = getVerifyChangeSkillTemplate();
+      expect(template.instructions).toContain('DST');
+      expect(template.instructions).toContain('fault injection');
+      expect(template.instructions).toContain('Toxiproxy');
+      expect(template.instructions).toContain('latency');
+      expect(template.instructions).toContain('recovery');
+    });
+
+    it('command template includes DST fault injection', () => {
+      const template = getOpsxVerifyCommandTemplate();
+      expect(template.content).toContain('DST');
+      expect(template.content).toContain('fault injection');
+      expect(template.content).toContain('Toxiproxy');
+      expect(template.content).toContain('latency');
+      expect(template.content).toContain('recovery');
+    });
+  });
+
+  describe('E2E verification', () => {
+    it('skill template includes Playwright e2e', () => {
+      const template = getVerifyChangeSkillTemplate();
+      expect(template.instructions).toContain('Playwright');
+      expect(template.instructions).toContain('Figma-Compliance');
+      expect(template.instructions).toContain('Business-Workflows');
+      expect(template.instructions).toContain('Smoke');
+    });
+
+    it('command template includes Playwright e2e', () => {
+      const template = getOpsxVerifyCommandTemplate();
+      expect(template.content).toContain('Playwright');
+      expect(template.content).toContain('Figma-Compliance');
+      expect(template.content).toContain('Business-Workflows');
+      expect(template.content).toContain('Smoke');
+    });
+  });
+
+  describe('Pre-complete gate', () => {
+    it('skill template includes evidence-before-claims', () => {
+      const template = getVerifyChangeSkillTemplate();
+      expect(template.instructions).toContain('evidence');
+      expect(template.instructions).toContain('exit code');
+      expect(template.instructions).toContain('NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE');
+    });
+
+    it('command template includes evidence-before-claims', () => {
+      const template = getOpsxVerifyCommandTemplate();
+      expect(template.content).toContain('evidence');
+      expect(template.content).toContain('exit code');
+      expect(template.content).toContain('NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE');
+    });
+  });
+
+  describe('Code review', () => {
+    it('skill template includes structured code review', () => {
+      const template = getVerifyChangeSkillTemplate();
+      expect(template.instructions).toContain('Code Review');
+      expect(template.instructions).toContain('critical');
+      expect(template.instructions).toContain('security');
+      expect(template.instructions).toContain('test gaps');
+    });
+
+    it('command template includes structured code review', () => {
+      const template = getOpsxVerifyCommandTemplate();
+      expect(template.content).toContain('Code Review');
+      expect(template.content).toContain('critical');
+      expect(template.content).toContain('security');
+      expect(template.content).toContain('test gaps');
+    });
+  });
+
+  describe('Unified verification report', () => {
+    it('skill template includes unified report structure', () => {
+      const template = getVerifyChangeSkillTemplate();
+      expect(template.instructions).toContain('verification_report');
+      expect(template.instructions).toContain('dst_simulation');
+      expect(template.instructions).toContain('e2e');
+      expect(template.instructions).toContain('code_review');
+      expect(template.instructions).toContain('overall');
+    });
+
+    it('command template includes unified report structure', () => {
+      const template = getOpsxVerifyCommandTemplate();
+      expect(template.content).toContain('verification_report');
+      expect(template.content).toContain('dst_simulation');
+      expect(template.content).toContain('e2e');
+      expect(template.content).toContain('code_review');
+      expect(template.content).toContain('overall');
     });
   });
 });
